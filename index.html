@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Этима — Interpretador lingüístico del ruso</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
+        rel="stylesheet">
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+
+</head>
+
+<body>
+
+    <header class="header">
+        <div class="header-inner">
+            <div class="logo-area">
+                <div class="logo-mark">Э</div>
+                <div>
+                    <h1 class="title">Этима</h1>
+                    <p class="subtitle">Rusikinputinski</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <span class="tagline">Etimología · Gramática comparativa · Análisis semántico</span>
+                <button class="settings-btn" id="settingsToggle" title="Configuración"
+                    onclick="toggleSettings()">⚙️</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="settings-panel" id="settingsPanel">
+        <div class="settings-inner">
+            <div class="settings-header">
+                <h3 class="settings-title">Configuración</h3>
+                <button class="close-btn" onclick="toggleSettings()">✕</button>
+            </div>
+            <div class="config-section">
+                <p class="config-label">Clave API</p>
+                <div class="api-key-row">
+                    <input class="api-key-input" type="password" id="apiKeyInput" placeholder="..." spellcheck="false">
+                    <button class="save-key-btn" id="saveKeyBtn" onclick="saveApiKey()">Guardar</button>
+                    <button class="clear-key-btn" id="clearKeyBtn" onclick="clearApiKey()"
+                        style="display:none">Borrar</button>
+                </div>
+                <p class="key-status" id="keyStatus" style="display:none"></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="mode-tabs">
+        <button class="mode-tab active" id="tabAnalysis" onclick="switchMode('analysis')">
+            Анализar
+        </button>
+        <button class="mode-tab" id="tabDictionary" onclick="switchMode('dictionary')">
+            Diccionario
+            <span class="dic-count-badge">47 292 palabras</span>
+        </button>
+    </div>
+
+    <div class="search-area">
+        <div class="search-box">
+            <div class="input-row">
+                <span class="input-icon">🔍</span>
+                <input class="main-input" type="text" id="wordInput" placeholder="Escribe una palabra en ruso…"
+                    spellcheck="false">
+                <button class="keyboard-toggle-btn" id="keyboardToggleBtn" onclick="toggleKeyboard()"
+                    title="Teclado cirílico">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="2" y="6" width="20" height="13" rx="2" />
+                        <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8M6 14h.01M18 14h.01" />
+                    </svg>
+                    <span>АБВ</span>
+                </button>
+                <button class="search-btn" id="searchBtn" onclick="analyze()">Analizar</button>
+            </div>
+
+            <div class="cyrillic-keyboard" id="cyrillicKeyboard" style="display:none"></div>
+
+            <div class="examples-row">
+                <span class="examples-label">Ejemplos:</span>
+                <button class="example-chip" onclick="analyzeWord('тоска')">тоска</button>
+                <button class="example-chip" onclick="analyzeWord('душа')">душа</button>
+                <button class="example-chip" onclick="analyzeWord('быть')">быть</button>
+                <button class="example-chip" onclick="analyzeWord('свобода')">свобода</button>
+                <button class="example-chip" onclick="analyzeWord('ничего')">ничего</button>
+                <button class="example-chip" onclick="analyzeWord('пошлость')">пошлость</button>
+                <button class="example-chip" onclick="analyzeWord('мир')">мир</button>
+            </div>
+            <div class="history-row" id="historyRow" style="display:none">
+                <span class="history-label">Historial:</span>
+                <div class="history-list" id="historyList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="loading-container" id="loadingArea" style="display:none">
+        <div class="loading-glyph">
+            <span class="loading-letter">Я</span>
+            <div class="loading-ring"></div>
+        </div>
+        <p class="loading-text" id="loadingText">Consultando raíces protoeslavas…</p>
+        <div class="loading-bar">
+            <div class="loading-bar-inner"></div>
+        </div>
+    </div>
+
+    <div class="error-box" id="errorBox" style="display:none">
+        <span>⚠️</span> <span id="errorText"></span>
+    </div>
+
+    <div class="results-area" id="resultsArea" style="display:none"></div>
+
+    <div class="empty-state" id="emptyState">
+        <div class="empty-glyph">Э</div>
+        <p class="empty-text">
+            Escribí cualquier palabra en ruso para saber su etimología,
+            evolución histórica y análisis gramatical comparativo con el español.
+        </p>
+        <div class="feature-grid">
+            <div class="feature-card"><strong class="feature-title">Etimología</strong></div>
+            <div class="feature-card"><strong class="feature-title">Gramática comparativa</strong></div>
+            <div class="feature-card"><strong class="feature-title">Evolución semántica</strong></div>
+            <div class="feature-card"><strong class="feature-title">Matices culturales</strong></div>
+        </div>
+    </div>
+
+    <button class="cache-btn" id="exportBtn" onclick="exportCache()">Exportar caché</button>
+
+    <div class="dictionary-area" id="dictionaryArea" style="display:none">
+        <div class="dic-search-wrap">
+            <div class="dic-search-row">
+                <span class="input-icon">🔎</span>
+                <input class="dic-input" id="dicInput" type="text" placeholder="Buscar en el diccionario…"
+                    spellcheck="false" oninput="onDicInput()" />
+                <span class="dic-hint" id="dicHint"></span>
+            </div>
+        </div>
+
+        <div class="dic-alpha-filter" id="dicAlphaFilter"></div>
+
+        <div class="dic-status" id="dicStatus">Cargando diccionario…</div>
+        <div class="dic-results" id="dicResults"></div>
+        <div class="dic-pagination" id="dicPagination"></div>
+        <div class="dic-detail" id="dicDetail" style="display:none">
+            <button class="dic-back-btn" onclick="closeDicDetail()">← Volver</button>
+            <div id="dicDetailContent"></div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <p>Para mi amorcito que estudia ruso.</p>
+    </footer>
+
+    <script src="script.js"></script>
+
+</body>
+
+</html>
