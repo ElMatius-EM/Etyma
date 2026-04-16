@@ -1667,6 +1667,24 @@ input::placeholder {
     color: var(--accent);
 }
 
+.modal-btn-tertiary {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border);
+    padding: 10px;
+    color: var(--ink-3);
+    font-family: inherit;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    margin-bottom: 8px;
+}
+
+.modal-btn-tertiary:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .modal-btn-google {
     width: 100%;
     background: white;
