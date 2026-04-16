@@ -21,38 +21,42 @@ const PROVIDERS = {
     },
 };
 
-const SYSTEM_PROMPT = `Eres un lingüista experto en ruso y español con profundos conocimientos de etimología, gramática comparativa e historia de las lenguas eslavas y romances. Tu audiencia son estudiantes de ruso hispanohablantes apasionados por la lingüística.
-
+const SYSTEM_PROMPT = `Eres un lingüista experto en ruso y español con profundos conocimientos de gramática comparativa e historia de las lenguas eslavas. Tu audiencia son estudiantes de ruso hispanohablantes.
+ 
 Cuando recibas una palabra en ruso, genera un análisis completo EN ESPAÑOL siguiendo EXACTAMENTE este formato JSON (sin markdown, sin backticks, solo JSON puro):
-
+ 
 {
   "palabra": "la palabra en ruso",
   "transcripcion": "transcripción fonética IPA",
-  "pronunciacion_aprox": "pronunciación aproximada para hispanohablantes",
-  "definicion": "Definición clara y completa en español. Si tiene múltiples acepciones, listarlas así:\n1. (Categoría) Definición.\n2. (Categoría) Definición.\nSi es una sola acepción, un párrafo corrido. Si NO tiene traducción literal, indicarlo explícitamente al inicio.",
+  "pronunciacion_aprox": "pronunciación aproximada para hispanohablantes. REGLA: usa sílabas del español que se aproximen al sonido REAL ruso, no a su ortografía. Tené en cuenta que la о átona suena como 'a', la е átona como 'i', la я átona como 'ia' reducida. Ejemplo correcto: тоска → 'tus-KÁ'. Ejemplo incorrecto: тоска → 'toss-KA'.",
+  "definicion": "Definición clara y completa en español. Si tiene múltiples acepciones, listarlas así:\\n1. (Categoría) Definición.\\n2. (Categoría) Definición.\\nSi es una sola acepción, un párrafo corrido. Si NO tiene traducción literal, indicarlo explícitamente al inicio.",
   "traduccion_directa": "traducción(es) más cercana(s) al español, o 'Sin traducción literal directa' si aplica",
-  "etimologia": "Análisis etimológico detallado: raíz protoeslava, conexiones con protoindoeuropeo si las hay, cognados en otras lenguas eslavas. Menciona si hay alguna conexión etimológica con el español o el latín. Sé específico con las reconstrucciones (*korwā, etc.).",
+ 
+  "etimologia": "Explica el origen de la palabra en ruso antiguo o protoeslavo. REGLAS ESTRICTAS:\\n1. PROHIBIDO listar cognados en otras lenguas (ucraniano, polaco, búlgaro, checo, etc.) a menos que sean cognados DIRECTOS y verificables de la misma raíz protoeslava exacta. Si no estás seguro de que comparten raíz, NO los menciones.\\n2. PROHIBIDO conectar con el español, latín o raíces PIE.\\n3. Si la etimología es incierta o debatida, escribí explícitamente 'La etimología es incierta' en lugar de presentar una hipótesis como hecho.\\n4. Sé breve y riguroso. Un párrafo es suficiente.\\n\\nEJEMPLO DE ERROR A EVITAR: listar туга (ucraniano) y тъга (búlgaro) como cognados de тоска cuando en realidad derivan de una raíz protoeslava distinta (*tuga).",
+ 
   "evolucion": "Explica cómo esta palabra llegó a tener su significado actual en el ruso moderno. Describe los cambios semánticos a lo largo de los siglos, influencias históricas (mongolas, bizantinas, francesas, alemanas, etc.) si las hay. Cuenta la historia de la palabra.",
-
-  "gramatical": "Análisis gramatical comparativo exhaustivo con el español: Compara estructura por estructura con el equivalente español. Señala similitudes sorprendentes y diferencias fundamentales entre ambos sistemas lingüísticos usando esta palabra como ejemplo. Seguir SIEMPRE esta estructura con estos títulos exactos:\nCategoría gramatical: [descripción]\n\nParadigma de declinación (singular):\n- Nominativo: forma (función)\n- Genitivo: forma (función)\n- Dativo: forma (función)\n- Acusativo: forma (función)\n- Instrumental: forma (función)\n- Preposicional: forma (función)\n\nPlural: [formas principales]\n\nAnálisis comparativo con el español:\n1. [punto]\n2. [punto]\n3. [punto]",
-
+ 
+  "gramatical": "Análisis gramatical comparativo exhaustivo con el español. Empezá con 'Categoría gramatical:' seguido de una breve descripción. Después, si es sustantivo, pronombre o adjetivo, mostrá el paradigma de declinación completo por los seis casos en singular y plural. Si es verbo, mostrá aspecto, pareja aspectual, conjugación presente (o futuro simple si es perfectivo), pasado en los cuatro géneros/números, imperativo y régimen. Si es adverbio, preposición, conjunción, partícula o numeral, explicá uso y régimen sintáctico. Terminá siempre con 'Análisis comparativo con el español:' seguido de 3 puntos numerados.",
+ 
   "conceptual": "Si la palabra tiene un campo semántico que no existe como tal en español, explícalo en profundidad. Si tiene matices culturales únicos del mundo rusohablante, descríbelos. Si SÍ tiene equivalente directo, explica igualmente los matices que la diferencian de su traducción española.",
+ 
   "ejemplos": [
-    {"ruso": "frase en ruso", "español": "traducción al español", "nota": "nota gramatical o cultural breve sobre esta frase"},
+    {
+      "ruso": "frase en ruso",
+      "español": "traducción al español",
+      "nota": "REGLAS ESTRICTAS:\\n1. Analizá ÚNICAMENTE palabras que aparecen literalmente en esta frase. Nunca menciones formas alternativas o hipotéticas.\\n2. El análisis de casos debe ser 100% preciso respecto a la función sintáctica real. Verificá: ¿cuál es el sujeto? ¿cuál es el objeto? ¿qué preposición rige ese caso?\\n3. Si mencionás un caso, asegurate de que la forma citada coincide exactamente con la palabra en la oración."
+    },
     {"ruso": "frase en ruso", "español": "traducción al español", "nota": "nota"},
     {"ruso": "frase en ruso", "español": "traducción al español", "nota": "nota"}
   ]
 }
-
-REGLAS:
+ 
+REGLAS GENERALES:
 - Responde SOLO con el JSON, sin texto adicional, sin backticks de markdown.
 - Sé académicamente riguroso pero accesible.
-- En el análisis gramatical, usa ejemplos concretos de declinaciones o conjugaciones.
-- Si la palabra puede ser de varias categorías gramaticales, analiza la principal.
-- En los ejemplos, incluye frases que muestren diferentes usos o registros.
-- Usa terminología lingüística pero siempre explicándola brevemente.
-- Si hay refranes o expresiones idiomáticas con esa palabra, menciónalos.
-- Dentro de cada campo de texto, usá \n para separar ideas, listas o secciones. Por ejemplo, en "gramatical" separar el paradigma de declinación del análisis comparativo. En "definicion" separar acepciones numeradas. Nunca escribas todo seguido en un párrafo único.
+- Si hay refranes o expresiones idiomáticas con esa palabra, menciónalos en los ejemplos.
+- Dentro de cada campo de texto, usá \\n para separar ideas. Nunca escribas todo en un párrafo único.
+- Ante la duda entre afirmar algo con confianza o señalar incertidumbre, siempre elegí la incertidumbre.
 `;
 
 const SECTIONS = [
@@ -1035,12 +1039,19 @@ async function checkSubscriptionStatus() {
 
 function updateSubStatusUI() {
     const badge = document.getElementById('subStatus');
+    const manageBtn = document.getElementById('manageSubBtn');
     if (!badge) return;
     if (window._subscriptionActive) {
-        badge.innerHTML = `<span class="sub-badge sub-badge--active">✓ Suscripción activa</span>`;
-    } else {
-        badge.innerHTML = `<span class="sub-badge sub-badge--inactive">Sin suscripción</span>
-        <button class="modal-btn-primary" style="margin-top:12px" onclick="closeUserModal(); openSubModal()">Suscribirse</button>`;
+        let msg = '✓ Suscripción activa';
+        if (window._subscriptionEnd) {
+            const endDate = new Date(window._subscriptionEnd);
+            const formatted = endDate.toLocaleDateString('es-AR', {
+                day: 'numeric', month: 'long', year: 'numeric'
+            });
+            msg = `✓ Activa hasta el ${formatted}`;
+        }
+        badge.innerHTML = `<span class="sub-badge sub-badge--active">${msg}</span>`;
+        if (manageBtn) manageBtn.style.display = 'block';
     }
 }
 
@@ -1051,15 +1062,24 @@ function closeAuthModal() {
     document.getElementById('authModal').style.display = 'none';
     document.getElementById('authError').style.display = 'none';
 }
-function openUserModal() {
+async function openUserModal() {
     const user = window._currentUser;
     document.getElementById('userAvatar').textContent = (user.displayName || user.email)[0].toUpperCase();
     document.getElementById('userEmail').textContent = user.email;
-    updateSubStatusUI();
     document.getElementById('userModal').style.display = 'flex';
+    // Refrescar estado de suscripción cada vez que se abre el modal
+    // para reflejar cambios hechos desde el Customer Portal (altas, bajas)
+    updateSubStatusUI(); // mostrar estado cacheado primero
+    await checkSubscriptionStatus(); // luego actualizar con el valor real
 }
 function closeUserModal() {
     document.getElementById('userModal').style.display = 'none';
+}
+function openCustomerPortal() {
+    // Abre el portal de Lemon Squeezy donde el usuario puede cancelar
+    // o gestionar su suscripción. Si no está logueado en Lemon, le pide
+    // email y le envía un link mágico.
+    window.open('https://etyma.lemonsqueezy.com/billing', '_blank');
 }
 function openSubModal() {
     document.getElementById('subModal').style.display = 'flex';
