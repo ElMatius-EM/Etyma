@@ -146,7 +146,7 @@
                 <li>✓ Evolución semántica histórica</li>
                 <li>✓ Matices culturales únicos</li>
             </ul>
-            <button class="modal-btn-primary" onclick="goToCheckout()">Suscribirse — $2.49/mes</button>
+            <button class="modal-btn-primary" onclick="goToCheckout()">Suscribirse — $3.49/mes</button>
             <p class="modal-alt">¿Tenés tu propia clave de API? <a href="#"
                     onclick="openAdvancedSettings()">Configuración avanzada</a></p>
         </div>
@@ -159,6 +159,8 @@
             <div class="user-avatar" id="userAvatar"></div>
             <p class="user-email" id="userEmail"></p>
             <div class="sub-status" id="subStatus"></div>
+            <button class="modal-btn-tertiary" id="manageSubBtn" onclick="openCustomerPortal()"
+                style="display:none">Gestionar suscripción</button>
             <button class="modal-btn-secondary" onclick="logout()">Cerrar sesión</button>
         </div>
     </div>
@@ -317,7 +319,7 @@
     </main>
 
     <footer class="footer">
-        <p>Hecho con amor para Sabina.</p>
+        <p>© 2026 Etyma. Todos los derechos reservados.</p>
     </footer>
 
     <script src="script.js">
