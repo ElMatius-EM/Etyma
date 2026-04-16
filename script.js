@@ -1,3 +1,5 @@
+const WORKER_URL = 'https://black-cloud-a963.etyma.workers.dev';
+
 const PROVIDERS = {
     'gemini-flash': {
         name: 'Google Gemini 2.5 Flash', short: 'Gemini Flash',
@@ -67,7 +69,7 @@ const LOADING_PHRASES = [
     'Comparando estructuras gramaticales…', 'Analizando evolución semántica…',
 ];
 
-const selectedProvider = 'deepseek';
+let selectedProvider = 'deepseek';
 
 // ─── IndexedDB cache ───
 const DB_NAME = 'etima_cache';
@@ -145,6 +147,169 @@ let activeSection = null;
 let currentResult = null;
 let loadingInterval = null;
 
+// ─── Palabras gratuitas — categorías leídas del JSON ─────────
+// WORD_CATEGORIES ya no está hardcodeado aquí.
+// Las categorías (pos, label, icon) vienen de words.json,
+// generado por etyma.py. Para agregar palabras o categorías
+// nuevas, editá CATEGORIAS en etyma.py y corré el script.
+
+const POS_FILTERS = [
+    { id: 'all', label: 'Todos' },
+    { id: 'sustantivo', label: 'Sustantivos' },
+    { id: 'verbo', label: 'Verbos' },
+    { id: 'adjetivo', label: 'Adjetivos' },
+];
+
+let freeWordsData = null;
+let activePosFilter = 'all';
+
+async function loadFreeWords() {
+    try {
+        const res = await fetch('words.json');
+        if (!res.ok) return null;
+        freeWordsData = await res.json();
+        return freeWordsData;
+    } catch (e) {
+        console.warn('No se pudieron cargar las palabras gratuitas:', e);
+        return null;
+    }
+}
+
+async function renderFreeWords() {
+    const items = await loadFreeWords();
+    if (!items || items.length === 0) return;
+
+    // Build a lookup set of available words (in IndexedDB / words.json)
+    const available = new Set(items.map(i => i.word.trim().toLowerCase()));
+
+    const count = items.length;
+    const countEl = document.getElementById('freeWordsCount');
+    if (countEl) countEl.textContent = count;
+    const tabCount = document.getElementById('fwTabCount');
+    if (tabCount) tabCount.textContent = count;
+    const subCount = document.getElementById('subModalFreeCount');
+    if (subCount) subCount.textContent = `${count}+`;
+
+    // POS filter bar
+    const filterBar = document.getElementById('freeWordsAlpha');
+    if (filterBar) {
+        filterBar.innerHTML = '';
+        filterBar.className = 'fw-pos-filter';
+        POS_FILTERS.forEach(f => {
+            const btn = document.createElement('button');
+            btn.className = 'fw-pos-btn' + (f.id === 'all' ? ' active' : '');
+            btn.textContent = f.label;
+            btn.dataset.pos = f.id;
+            filterBar.appendChild(btn);
+        });
+        filterBar.addEventListener('click', e => {
+            const btn = e.target.closest('.fw-pos-btn');
+            if (!btn) return;
+            filterBar.querySelectorAll('.fw-pos-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activePosFilter = btn.dataset.pos;
+            renderWordGroups(items);
+        });
+    }
+
+    renderWordGroups(items);
+}
+
+function renderWordGroups(items) {
+    const container = document.getElementById('freeWordsList');
+    if (!container) return;
+
+    // Filter by POS if needed
+    const filtered = activePosFilter === 'all'
+        ? items
+        : items.filter(i => i.pos === activePosFilter);
+
+    // Derive ordered categories from the items themselves (preserves etyma.py order)
+    const seen = new Map(); // label -> { pos, label, icon, words[] }
+    filtered.forEach(item => {
+        if (!item.label) return; // legacy entries without category metadata
+        const key = item.label;
+        if (!seen.has(key)) {
+            seen.set(key, { pos: item.pos, label: item.label, icon: item.icon || '', words: [] });
+        }
+        seen.get(key).words.push(item.word);
+    });
+
+    // Items without category metadata go into a fallback group
+    const uncategorized = filtered.filter(i => !i.label).map(i => i.word);
+
+    let html = '';
+    seen.forEach(cat => {
+        if (!cat.words.length) return;
+        const iconHtml = cat.icon
+            ? `<i data-lucide="${cat.icon}" class="fw-group-icon"></i>`
+            : '';
+        html += `<div class="fw-group">
+            <div class="fw-group-header">
+                ${iconHtml}
+                <span class="fw-group-label">${cat.label}</span>
+                <span class="fw-group-count">${cat.words.length}</span>
+            </div>
+            <div class="fw-group-chips">
+                ${cat.words.map(w => {
+            const safe = w.replace(/"/g, '&quot;');
+            return `<button class="fw-chip" data-word="${safe}">${w}</button>`;
+        }).join('')}
+            </div>
+        </div>`;
+    });
+
+    // Fallback: palabras sin categoría (words.json viejo sin metadata)
+    if (uncategorized.length) {
+        html += `<div class="fw-group">
+            <div class="fw-group-header">
+                <i data-lucide="list" class="fw-group-icon"></i>
+                <span class="fw-group-label">Otras palabras</span>
+                <span class="fw-group-count">${uncategorized.length}</span>
+            </div>
+            <div class="fw-group-chips">
+                ${uncategorized.map(w => {
+            const safe = w.replace(/"/g, '&quot;');
+            return `<button class="fw-chip" data-word="${safe}">${w}</button>`;
+        }).join('')}
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html || '<p class="fw-empty">No hay palabras en esta categoría aún.</p>';
+    container.onclick = e => {
+        const btn = e.target.closest('.fw-chip');
+        if (btn) analyzeWord(btn.dataset.word);
+    };
+
+    // Render Lucide icons after injecting HTML
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function filterFreeWords() { }  // kept for compatibility
+
+
+// ─── Sidebar toggle ───────────────────────────────────────────
+function toggleFwSidebar() {
+    const sidebar = document.getElementById('fwSidebar');
+    const tab = document.getElementById('fwTab');
+    const backdrop = document.getElementById('fwBackdrop');
+    const isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+        closeFwSidebar();
+    } else {
+        sidebar.classList.add('open');
+        tab.classList.add('open');
+        backdrop.classList.add('visible');
+    }
+}
+
+function closeFwSidebar() {
+    document.getElementById('fwSidebar').classList.remove('open');
+    document.getElementById('fwTab').classList.remove('open');
+    document.getElementById('fwBackdrop').classList.remove('visible');
+}
+
 function init() {
     openDB().catch(e => console.warn('IndexedDB no disponible:', e));
     if (apiKeys[selectedProvider]) {
@@ -153,6 +318,7 @@ function init() {
     }
     buildKeyboard();
     renderHistory();
+    renderFreeWords();
 }
 
 document.getElementById('wordInput').addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
@@ -205,7 +371,7 @@ function saveApiKey() {
     apiKeys[selectedProvider] = val;
     localStorage.setItem('etimolog_keys', JSON.stringify(apiKeys));
     markKeySaved();
-    updateActiveBadge();
+
     setTimeout(() => toggleSettings(), 400);
 }
 
@@ -315,7 +481,6 @@ async function callDeepSeek(word, key) {
     return d.choices?.[0]?.message?.content || '';
 }
 
-// ─── Analyze ───
 function analyzeWord(w) { document.getElementById('wordInput').value = w; analyze(w); }
 
 async function analyze(inputWord) {
@@ -323,19 +488,11 @@ async function analyze(inputWord) {
     if (!w) return;
 
     const wordCount = w.split(/\s+/).length;
-
-
     if (wordCount > 3) {
         showError('Por favor, ingresá una sola palabra o una frase corta (máximo 3 palabras). El análisis etimológico no funciona con oraciones largas.');
         document.getElementById('emptyState').style.display = 'none';
         document.getElementById('resultsArea').style.display = 'none';
         return;
-    }
-    // ---------------------------------------------
-
-    if (!apiKeys[selectedProvider]) {
-        showError('Primero configurá tu proveedor y clave API. Tocá ⚙️ arriba.');
-        toggleSettings(); return;
     }
 
     document.getElementById('emptyState').style.display = 'none';
@@ -346,6 +503,7 @@ async function analyze(inputWord) {
     startLoading();
 
     try {
+        // 1. Primero verificar caché — siempre, sin importar suscripción
         const cached = await getCached(w);
         if (cached) {
             currentResult = cached;
@@ -355,15 +513,41 @@ async function analyze(inputWord) {
             return;
         }
 
-        const key = apiKeys[selectedProvider];
+        // 2. No está en caché — verificar cómo proceder
+        const ownKey = apiKeys[selectedProvider];
+
+        if (!ownKey && !window._subscriptionActive) {
+            if (!window._currentUser) {
+                openAuthModal();
+            } else {
+                openSubModal();
+            }
+            return;
+        }
+
+        // 3. Llamar a la API
         let raw = '';
-        if (selectedProvider === 'anthropic') raw = await callAnthropic(w, key);
-        else if (selectedProvider === 'gemini-flash') raw = await callGemini(w, key);
-        else if (selectedProvider === 'deepseek') raw = await callDeepSeek(w, key);
+        if (ownKey) {
+            if (selectedProvider === 'anthropic') raw = await callAnthropic(w, ownKey);
+            else if (selectedProvider === 'gemini-flash') raw = await callGemini(w, ownKey);
+            else if (selectedProvider === 'deepseek') raw = await callDeepSeek(w, ownKey);
+        } else {
+            const token = await window._currentUser.getIdToken();
+            const res = await fetch(`${WORKER_URL}/analyze`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ word: w }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            raw = JSON.stringify(data.result);
+        }
 
         const clean = raw.replace(/```json|```/g, '').trim();
         currentResult = JSON.parse(clean);
-
 
         const russianKey = currentResult.palabra.trim().toLowerCase();
         saveToCache(russianKey, currentResult);
@@ -374,6 +558,7 @@ async function analyze(inputWord) {
         activeSection = null;
         addToHistory(w);
         renderResults(currentResult, false);
+
     } catch (err) {
         console.error(err);
         showError(err.message || 'No se pudo analizar la palabra. Verificá tu conexión e intentá de nuevo.');
@@ -818,6 +1003,168 @@ function applyAlphaFilter(letter, btnElement) {
     dicPage = 0;
     renderDicResults();
 }
+
+// ─── Auth ───
+function onAuthChanged(user) {
+    const authBtn = document.getElementById('authBtn');
+    if (user) {
+        authBtn.textContent = user.displayName || user.email.split('@')[0];
+        authBtn.onclick = openUserModal;
+        checkSubscriptionStatus();
+    } else {
+        authBtn.textContent = 'Iniciar sesión';
+        authBtn.onclick = openAuthModal;
+        window._subscriptionActive = false;
+    }
+}
+
+async function checkSubscriptionStatus() {
+    try {
+        const token = await window._currentUser.getIdToken();
+        const res = await fetch(`${WORKER_URL}/status`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        window._subscriptionActive = data.subscription_status === 'active';
+        window._subscriptionEnd = data.subscription_end;
+    } catch (e) {
+        window._subscriptionActive = false;
+    }
+    updateSubStatusUI();
+}
+
+function updateSubStatusUI() {
+    const badge = document.getElementById('subStatus');
+    if (!badge) return;
+    if (window._subscriptionActive) {
+        badge.innerHTML = `<span class="sub-badge sub-badge--active">✓ Suscripción activa</span>`;
+    } else {
+        badge.innerHTML = `<span class="sub-badge sub-badge--inactive">Sin suscripción</span>
+        <button class="modal-btn-primary" style="margin-top:12px" onclick="closeUserModal(); openSubModal()">Suscribirse</button>`;
+    }
+}
+
+function openAuthModal() {
+    document.getElementById('authModal').style.display = 'flex';
+}
+function closeAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+    document.getElementById('authError').style.display = 'none';
+}
+function openUserModal() {
+    const user = window._currentUser;
+    document.getElementById('userAvatar').textContent = (user.displayName || user.email)[0].toUpperCase();
+    document.getElementById('userEmail').textContent = user.email;
+    updateSubStatusUI();
+    document.getElementById('userModal').style.display = 'flex';
+}
+function closeUserModal() {
+    document.getElementById('userModal').style.display = 'none';
+}
+function openSubModal() {
+    document.getElementById('subModal').style.display = 'flex';
+}
+function closeSubModal() {
+    document.getElementById('subModal').style.display = 'none';
+}
+function openAdvancedSettings() {
+    closeSubModal();
+    toggleSettings();
+}
+
+function switchAuthTab(tab) {
+    document.getElementById('authLoginForm').style.display = tab === 'login' ? '' : 'none';
+    document.getElementById('authRegisterForm').style.display = tab === 'register' ? '' : 'none';
+    document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+    document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+}
+
+function showAuthError(msg) {
+    const el = document.getElementById('authError');
+    el.textContent = msg;
+    el.style.display = '';
+}
+
+async function loginWithEmail() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    try {
+        await window._signInWithEmailAndPassword(window._auth, email, password);
+        await createUserDocument(user.user || window._currentUser);
+        closeAuthModal();
+    } catch (e) {
+        showAuthError(e.code === 'auth/invalid-credential' ? 'Email o contraseña incorrectos.' : e.message);
+    }
+}
+
+async function registerWithEmail() {
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    try {
+        await window._createUserWithEmailAndPassword(window._auth, email, password);
+        await createUserDocument(user.user || window._currentUser);
+        closeAuthModal();
+    } catch (e) {
+        showAuthError(e.code === 'auth/email-already-in-use' ? 'Ese email ya está registrado.' : e.message);
+    }
+}
+
+async function loginWithGoogle() {
+    try {
+        await window._signInWithPopup(window._auth, window._GoogleProvider);
+        closeAuthModal();
+    } catch (err) {
+        // COOP bloquea la detección del cierre del popup, pero el login puede haber funcionado
+        if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+            // Esperá un tick y chequeá si hay usuario
+            setTimeout(() => {
+                if (window._auth.currentUser) {
+                    closeAuthModal();
+                } else {
+                    showAuthError('No se pudo iniciar sesión con Google.');
+                }
+            }, 500);
+            return;
+        }
+        showAuthError('No se pudo iniciar sesión con Google.');
+        console.error(err);
+    }
+}
+
+async function logout() {
+    await window._signOut(window._auth);
+    closeUserModal();
+}
+
+async function goToCheckout() {
+    if (!window._currentUser) {
+        closeSubModal();
+        openAuthModal();
+        return;
+    }
+
+    const uid = window._currentUser.uid;
+    const checkoutUrl = `https://etyma.lemonsqueezy.com/checkout/buy/019d0073-ff79-400c-8f77-d455787c24e6?checkout%5Bcustom%5D%5Buser_id%5D=${uid}`;
+
+    const win = window.open('', '_blank');
+    win.location.href = checkoutUrl;
+}
+
+async function createUserDocument(user) {
+    try {
+        const token = await user.getIdToken();
+        await fetch(`${WORKER_URL}/create-user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+        });
+    } catch (e) {
+        console.warn('Error creando documento de usuario:', e);
+    }
+}
+
 
 init();
 renderAlphaFilter();
