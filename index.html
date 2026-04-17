@@ -1,332 +1,1190 @@
-<!DOCTYPE html>
-<html lang="es">
+const WORKER_URL = 'https://black-cloud-a963.etyma.workers.dev';
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Этима — Interpretador lingüístico del ruso</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap"
-        rel="stylesheet">
-    <link
-        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300..700;1,300..700&display=swap"
-        rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+const PROVIDERS = {
+    'gemini-flash': {
+        name: 'Google Gemini 2.5 Flash', short: 'Gemini Flash',
+        placeholder: 'AIzaSy...',
+        desc: 'Creá tu clave gratis en <a href="https://aistudio.google.com/apikey" target="_blank">Google AI Studio</a>.',
+        costPer: '~$0.003',
+    },
+    'deepseek': {
+        name: 'DeepSeek V3.2', short: 'DeepSeek V3.2',
+        placeholder: 'sk-...',
+        desc: 'Creá tu clave en <a href="https://platform.deepseek.com/api_keys" target="_blank">platform.deepseek.com</a>.',
+        costPer: '~$0.001',
+    },
+    'anthropic': {
+        name: 'Claude Sonnet 4', short: 'Claude Sonnet 4',
+        placeholder: 'sk-ant-api03-...',
+        desc: 'Creá tu clave en <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.',
+        costPer: '~$0.02',
+    },
+};
 
-    <!-- Firebase SDK -->
-    <script type="module">
-        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-        import {
-            getAuth, onAuthStateChanged, signInWithEmailAndPassword,
-            createUserWithEmailAndPassword, signInWithPopup,
-            GoogleAuthProvider, signOut
-        } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js';
+const SYSTEM_PROMPT = `Eres un lingüista experto en ruso y español con profundos conocimientos de gramática comparativa e historia de las lenguas eslavas. Tu audiencia son estudiantes de ruso hispanohablantes.
+ 
+Cuando recibas una palabra en ruso, genera un análisis completo EN ESPAÑOL siguiendo EXACTAMENTE este formato JSON (sin markdown, sin backticks, solo JSON puro):
+ 
+{
+  "palabra": "la palabra en ruso",
+  "transcripcion": "transcripción fonética IPA",
+  "pronunciacion_aprox": "pronunciación aproximada para hispanohablantes. REGLA: usa sílabas del español que se aproximen al sonido REAL ruso, no a su ortografía. Tené en cuenta que la о átona suena como 'a', la е átona como 'i', la я átona como 'ia' reducida. Ejemplo correcto: тоска → 'tus-KÁ'. Ejemplo incorrecto: тоска → 'toss-KA'.",
+  "definicion": "Definición clara y completa en español. Si tiene múltiples acepciones, listarlas así:\\n1. (Categoría) Definición.\\n2. (Categoría) Definición.\\nSi es una sola acepción, un párrafo corrido. Si NO tiene traducción literal, indicarlo explícitamente al inicio.",
+  "traduccion_directa": "traducción(es) más cercana(s) al español, o 'Sin traducción literal directa' si aplica",
+ 
+  "etimologia": "Explica el origen de la palabra en ruso antiguo o protoeslavo. REGLAS ESTRICTAS:\\n1. PROHIBIDO listar cognados en otras lenguas (ucraniano, polaco, búlgaro, checo, etc.) a menos que sean cognados DIRECTOS y verificables de la misma raíz protoeslava exacta. Si no estás seguro de que comparten raíz, NO los menciones.\\n2. PROHIBIDO conectar con el español, latín o raíces PIE.\\n3. Si la etimología es incierta o debatida, escribí explícitamente 'La etimología es incierta' en lugar de presentar una hipótesis como hecho.\\n4. Sé breve y riguroso. Un párrafo es suficiente.\\n\\nEJEMPLO DE ERROR A EVITAR: listar туга (ucraniano) y тъга (búlgaro) como cognados de тоска cuando en realidad derivan de una raíz protoeslava distinta (*tuga).",
+ 
+  "evolucion": "Explica cómo esta palabra llegó a tener su significado actual en el ruso moderno. Describe los cambios semánticos a lo largo de los siglos, influencias históricas (mongolas, bizantinas, francesas, alemanas, etc.) si las hay. Cuenta la historia de la palabra.",
+ 
+  "gramatical": "Análisis gramatical comparativo exhaustivo con el español. Empezá con 'Categoría gramatical:' seguido de una breve descripción. Después, si es sustantivo, pronombre o adjetivo, mostrá el paradigma de declinación completo por los seis casos en singular y plural. Si es verbo, mostrá aspecto, pareja aspectual, conjugación presente (o futuro simple si es perfectivo), pasado en los cuatro géneros/números, imperativo y régimen. Si es adverbio, preposición, conjunción, partícula o numeral, explicá uso y régimen sintáctico. Terminá siempre con 'Análisis comparativo con el español:' seguido de 3 puntos numerados.",
+ 
+  "conceptual": "Si la palabra tiene un campo semántico que no existe como tal en español, explícalo en profundidad. Si tiene matices culturales únicos del mundo rusohablante, descríbelos. Si SÍ tiene equivalente directo, explica igualmente los matices que la diferencian de su traducción española.",
+ 
+  "ejemplos": [
+    {
+      "ruso": "frase en ruso",
+      "español": "traducción al español",
+      "nota": "REGLAS ESTRICTAS:\\n1. Analizá ÚNICAMENTE palabras que aparecen literalmente en esta frase. Nunca menciones formas alternativas o hipotéticas.\\n2. El análisis de casos debe ser 100% preciso respecto a la función sintáctica real. Verificá: ¿cuál es el sujeto? ¿cuál es el objeto? ¿qué preposición rige ese caso?\\n3. Si mencionás un caso, asegurate de que la forma citada coincide exactamente con la palabra en la oración."
+    },
+    {"ruso": "frase en ruso", "español": "traducción al español", "nota": "nota"},
+    {"ruso": "frase en ruso", "español": "traducción al español", "nota": "nota"}
+  ]
+}
+ 
+REGLAS GENERALES:
+- Responde SOLO con el JSON, sin texto adicional, sin backticks de markdown.
+- Sé académicamente riguroso pero accesible.
+- Si hay refranes o expresiones idiomáticas con esa palabra, menciónalos en los ejemplos.
+- Dentro de cada campo de texto, usá \\n para separar ideas. Nunca escribas todo en un párrafo único.
+- Ante la duda entre afirmar algo con confianza o señalar incertidumbre, siempre elegí la incertidumbre.
+`;
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyB-qGims3lXZjeAK56k4S7LgGqHtbCDbqc",
-            authDomain: "etyma-54092.firebaseapp.com",
-            projectId: "etyma-54092",
-            storageBucket: "etyma-54092.appspot.com",
-            messagingSenderId: "390642659214",
-            appId: "1:390642659214:web:6fc9dc650a4dbe4a193edf" // ← reemplazá con el appId que copiaste
+const SECTIONS = [
+    { key: 'definicion', label: 'Definición y traducción' },
+    { key: 'etimologia', label: 'Etimología' },
+    { key: 'evolucion', label: 'Evolución semántica' },
+    { key: 'gramatical', label: 'Análisis gramatical comparativo' },
+    { key: 'conceptual', label: 'Significado conceptual' },
+    { key: 'ejemplos', label: 'Ejemplos en contexto' },
+];
+
+const LOADING_PHRASES = [
+    'Consultando raíces protoeslavas…', 'Rastreando conexiones indoeuropeas…',
+    'Comparando estructuras gramaticales…', 'Analizando evolución semántica…',
+];
+
+let selectedProvider = 'deepseek';
+
+// ─── IndexedDB cache ───
+const DB_NAME = 'etima_cache';
+const DB_VERSION = 1;
+const STORE = 'words';
+let db = null;
+
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = e => {
+            const d = e.target.result;
+            if (!d.objectStoreNames.contains(STORE)) {
+                d.createObjectStore(STORE, { keyPath: 'word' });
+            }
         };
+        req.onsuccess = e => { db = e.target.result; resolve(db); preloadFromJSON(); };
+        req.onerror = () => reject(req.error);
+    });
+}
 
-        const app = initializeApp(firebaseConfig);
-        window._auth = getAuth(app);
-        window._GoogleProvider = new GoogleAuthProvider();
-        window._signInWithEmailAndPassword = signInWithEmailAndPassword;
-        window._createUserWithEmailAndPassword = createUserWithEmailAndPassword;
-        window._signInWithPopup = signInWithPopup;
-        window._signOut = signOut;
-        window._onAuthStateChanged = onAuthStateChanged;
+function getCached(word) {
+    return new Promise((resolve) => {
+        if (!db) { resolve(null); return; }
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).get(word.trim().toLowerCase());
+        req.onsuccess = () => resolve(req.result ? req.result.data : null);
+        req.onerror = () => resolve(null);
+    });
+}
 
-        window.addEventListener('load', () => {
-            onAuthStateChanged(window._auth, user => {
-                window._currentUser = user;
-                if (typeof onAuthChanged === 'function') onAuthChanged(user);
+function saveToCache(word, data) {
+    if (!db) return;
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put({ word: word.trim().toLowerCase(), data, savedAt: Date.now() });
+}
+
+async function preloadFromJSON() {
+    const count = await new Promise(res => {
+        const tx = db.transaction(STORE, 'readonly');
+        const req = tx.objectStore(STORE).count();
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => res(-1);
+    });
+    if (count > 0) return;
+
+    try {
+        const res = await fetch('words.json');
+        if (!res.ok) return;
+        const items = await res.json();
+        const tx = db.transaction(STORE, 'readwrite');
+        const store = tx.objectStore(STORE);
+
+        items.forEach(item => {
+            // Si viene del nuevo export, usa item.word. Si es el formato viejo, usa item.palabra.
+            const key = item.word ? item.word : item.palabra.trim().toLowerCase();
+            const data = item.data ? item.data : item;
+
+            store.put({
+                word: key,
+                data: data,
+                savedAt: item.savedAt || Date.now(),
             });
         });
-    </script>
+        console.log(`Etima: ${items.length} palabras precargadas desde words.json`);
+    } catch (e) {
+        console.error('Error al precargar JSON:', e);
+    }
+}
 
-</head>
 
-<body>
+let apiKeys = JSON.parse(localStorage.getItem('etimolog_keys') || '{}');
+let history = JSON.parse(localStorage.getItem('etimolog_history') || '[]');
+let activeSection = null;
+let currentResult = null;
+let loadingInterval = null;
 
-    <header class="header">
-        <div class="header-inner">
-            <div class="logo-area">
-                <div class="logo-mark">Э</div>
-                <div>
-                    <h1 class="title">Этима</h1>
-                    <!-- <p class="subtitle">Rusikinputinski</p> -->
-                </div>
-            </div>
-            <div class="header-right">
-                <span class="tagline">Etimología · Gramática comparativa · Análisis semántico</span>
-                <div class="auth-area" id="authArea">
-                    <button class="auth-btn" id="authBtn" onclick="openAuthModal()">Iniciar sesión</button>
-                </div>
-                <button class="settings-btn" id="settingsToggle" title="Configuración avanzada"
-                    onclick="toggleSettings()"><i data-lucide="settings-2" class="settings-icon"></i></button>
-            </div>
-        </div>
-    </header>
+// ─── Palabras gratuitas — categorías leídas del JSON ─────────
+// WORD_CATEGORIES ya no está hardcodeado aquí.
+// Las categorías (pos, label, icon) vienen de words.json,
+// generado por etyma.py. Para agregar palabras o categorías
+// nuevas, editá CATEGORIAS en etyma.py y corré el script.
 
-    <!-- Modal Auth -->
-    <div class="modal-overlay" id="authModal" style="display:none">
-        <div class="modal">
-            <button class="modal-close" onclick="closeAuthModal()">✕</button>
-            <div class="modal-tabs">
-                <button class="modal-tab active" id="tabLogin" onclick="switchAuthTab('login')">Iniciar sesión</button>
-                <button class="modal-tab" id="tabRegister" onclick="switchAuthTab('register')">Registrarse</button>
+const POS_FILTERS = [
+    { id: 'all', label: 'Todos' },
+    { id: 'sustantivo', label: 'Sustantivos' },
+    { id: 'verbo', label: 'Verbos' },
+    { id: 'adjetivo', label: 'Adjetivos' },
+];
+
+let freeWordsData = null;
+let activePosFilter = 'all';
+
+async function loadFreeWords() {
+    try {
+        const res = await fetch('words.json');
+        if (!res.ok) return null;
+        freeWordsData = await res.json();
+        return freeWordsData;
+    } catch (e) {
+        console.warn('No se pudieron cargar las palabras gratuitas:', e);
+        return null;
+    }
+}
+
+async function renderFreeWords() {
+    const items = await loadFreeWords();
+    if (!items || items.length === 0) return;
+
+    // Build a lookup set of available words (in IndexedDB / words.json)
+    const available = new Set(items.map(i => i.word.trim().toLowerCase()));
+
+    const count = items.length;
+    const countEl = document.getElementById('freeWordsCount');
+    if (countEl) countEl.textContent = count;
+    const tabCount = document.getElementById('fwTabCount');
+    if (tabCount) tabCount.textContent = count;
+    const subCount = document.getElementById('subModalFreeCount');
+    if (subCount) subCount.textContent = `${count}+`;
+
+    // POS filter bar
+    const filterBar = document.getElementById('freeWordsAlpha');
+    if (filterBar) {
+        filterBar.innerHTML = '';
+        filterBar.className = 'fw-pos-filter';
+        POS_FILTERS.forEach(f => {
+            const btn = document.createElement('button');
+            btn.className = 'fw-pos-btn' + (f.id === 'all' ? ' active' : '');
+            btn.textContent = f.label;
+            btn.dataset.pos = f.id;
+            filterBar.appendChild(btn);
+        });
+        filterBar.addEventListener('click', e => {
+            const btn = e.target.closest('.fw-pos-btn');
+            if (!btn) return;
+            filterBar.querySelectorAll('.fw-pos-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activePosFilter = btn.dataset.pos;
+            renderWordGroups(items);
+        });
+    }
+
+    renderWordGroups(items);
+}
+
+function renderWordGroups(items) {
+    const container = document.getElementById('freeWordsList');
+    if (!container) return;
+
+    // Filter by POS if needed
+    const filtered = activePosFilter === 'all'
+        ? items
+        : items.filter(i => i.pos === activePosFilter);
+
+    // Derive ordered categories from the items themselves (preserves etyma.py order)
+    const seen = new Map(); // label -> { pos, label, icon, words[] }
+    filtered.forEach(item => {
+        if (!item.label) return; // legacy entries without category metadata
+        const key = item.label;
+        if (!seen.has(key)) {
+            seen.set(key, { pos: item.pos, label: item.label, icon: item.icon || '', words: [] });
+        }
+        seen.get(key).words.push(item.word);
+    });
+
+    // Items without category metadata go into a fallback group
+    const uncategorized = filtered.filter(i => !i.label).map(i => i.word);
+
+    let html = '';
+    seen.forEach(cat => {
+        if (!cat.words.length) return;
+        const iconHtml = cat.icon
+            ? `<i data-lucide="${cat.icon}" class="fw-group-icon"></i>`
+            : '';
+        html += `<div class="fw-group">
+            <div class="fw-group-header">
+                ${iconHtml}
+                <span class="fw-group-label">${cat.label}</span>
+                <span class="fw-group-count">${cat.words.length}</span>
             </div>
-            <div class="authLoginF" id="authLoginForm">
-                <input class="modal-input" type="email" id="loginEmail" placeholder="Email" />
-                <input class="modal-input" type="password" id="loginPassword" placeholder="Contraseña" />
-                <button class="modal-btn-primary" onclick="loginWithEmail()">Entrar</button>
-                <div class="modal-divider">o</div>
-                <button class="modal-btn-google" onclick="loginWithGoogle()">
-                    <svg width="18" height="18" viewBox="0 0 24 24">
-                        <path fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                        <path fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                    </svg>
-                    Continuar con Google
-                </button>
+            <div class="fw-group-chips">
+                ${cat.words.map(w => {
+            const safe = w.replace(/"/g, '&quot;');
+            return `<button class="fw-chip" data-word="${safe}">${w}</button>`;
+        }).join('')}
             </div>
-            <div class="authLoginF" id="authRegisterForm" style="display:none">
-                <input class="modal-input" type="email" id="registerEmail" placeholder="Email" />
-                <input class="modal-input" type="password" id="registerPassword"
-                    placeholder="Contraseña (mín. 6 caracteres)" />
-                <button class="modal-btn-primary" onclick="registerWithEmail()">Crear cuenta</button>
-                <div class="modal-divider">o</div>
-                <button class="modal-btn-google" onclick="loginWithGoogle()">
-                    <svg width="18" height="18" viewBox="0 0 24 24">
-                        <path fill="#4285F4"
-                            d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-                        <path fill="#34A853"
-                            d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-                        <path fill="#FBBC05"
-                            d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" />
-                        <path fill="#EA4335"
-                            d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-                    </svg>
-                    Continuar con Google
-                </button>
+        </div>`;
+    });
+
+    // Fallback: palabras sin categoría (words.json viejo sin metadata)
+    if (uncategorized.length) {
+        html += `<div class="fw-group">
+            <div class="fw-group-header">
+                <i data-lucide="list" class="fw-group-icon"></i>
+                <span class="fw-group-label">Otras palabras</span>
+                <span class="fw-group-count">${uncategorized.length}</span>
             </div>
-            <p class="modal-error" id="authError" style="display:none"></p>
-        </div>
+            <div class="fw-group-chips">
+                ${uncategorized.map(w => {
+            const safe = w.replace(/"/g, '&quot;');
+            return `<button class="fw-chip" data-word="${safe}">${w}</button>`;
+        }).join('')}
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html || '<p class="fw-empty">No hay palabras en esta categoría aún.</p>';
+    container.onclick = e => {
+        const btn = e.target.closest('.fw-chip');
+        if (btn) analyzeWord(btn.dataset.word);
+    };
+
+    // Render Lucide icons after injecting HTML
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
+function filterFreeWords() { }  // kept for compatibility
+
+
+// ─── Sidebar toggle ───────────────────────────────────────────
+function toggleFwSidebar() {
+    const sidebar = document.getElementById('fwSidebar');
+    const tab = document.getElementById('fwTab');
+    const backdrop = document.getElementById('fwBackdrop');
+    const isOpen = sidebar.classList.contains('open');
+    if (isOpen) {
+        closeFwSidebar();
+    } else {
+        sidebar.classList.add('open');
+        tab.classList.add('open');
+        backdrop.classList.add('visible');
+    }
+}
+
+function closeFwSidebar() {
+    document.getElementById('fwSidebar').classList.remove('open');
+    document.getElementById('fwTab').classList.remove('open');
+    document.getElementById('fwBackdrop').classList.remove('visible');
+}
+
+function init() {
+    openDB().catch(e => console.warn('IndexedDB no disponible:', e));
+    if (apiKeys[selectedProvider]) {
+        document.getElementById('apiKeyInput').value = apiKeys[selectedProvider];
+        markKeySaved();
+    }
+    buildKeyboard();
+    renderHistory();
+    renderFreeWords();
+}
+
+document.getElementById('wordInput').addEventListener('keydown', e => { if (e.key === 'Enter') analyze(); });
+
+function selectProvider(id, silent) {
+    selectedProvider = id;
+    localStorage.setItem('etimolog_provider', id);
+    const p = PROVIDERS[id];
+    document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+    document.getElementById('card-' + id).classList.add('selected');
+    document.getElementById('providerLabel').textContent = p.name;
+    document.getElementById('providerDesc').innerHTML = p.desc;
+    document.getElementById('apiKeyInput').placeholder = p.placeholder;
+    const savedKey = apiKeys[id] || '';
+    document.getElementById('apiKeyInput').value = savedKey;
+    if (savedKey) { markKeySaved(); } else {
+        document.getElementById('saveKeyBtn').textContent = 'Guardar';
+        document.getElementById('clearKeyBtn').style.display = 'none';
+        document.getElementById('keyStatus').style.display = 'none';
+    }
+    updateActiveBadge();
+    if (!silent) document.getElementById('apiKeyInput').focus();
+}
+
+//function updateActiveBadge() {
+//    const badge = document.getElementById('activeProviderText');
+//    const dot = document.querySelector('.active-provider-badge .dot');
+//    if (apiKeys[selectedProvider]) {
+//        const p = PROVIDERS[selectedProvider];
+//        badge.textContent = p.name + '  ·  ' + p.costPer + '/palabra';
+//        dot.style.background = '#5a8a5a';
+//        document.getElementById('settingsToggle').classList.add('active');
+//    } else {
+//        badge.textContent = 'Sin configurar — tocá ⚙️';
+//        dot.style.background = '#5a5d6a';
+//       document.getElementById('settingsToggle').classList.remove('active');
+//    }
+//}
+
+function markKeySaved() {
+    document.getElementById('saveKeyBtn').textContent = '✓ Guardada';
+    document.getElementById('clearKeyBtn').style.display = '';
+    document.getElementById('keyStatus').style.display = '';
+    document.getElementById('keyStatus').textContent = '✓ Clave configurada';
+}
+
+function saveApiKey() {
+    const val = document.getElementById('apiKeyInput').value.trim();
+    if (!val) return;
+    apiKeys[selectedProvider] = val;
+    localStorage.setItem('etimolog_keys', JSON.stringify(apiKeys));
+    markKeySaved();
+
+    setTimeout(() => toggleSettings(), 400);
+}
+
+function clearApiKey() {
+    if (!selectedProvider) return;
+    delete apiKeys[selectedProvider];
+    localStorage.setItem('etimolog_keys', JSON.stringify(apiKeys));
+    document.getElementById('apiKeyInput').value = '';
+    document.getElementById('saveKeyBtn').textContent = 'Guardar';
+    document.getElementById('clearKeyBtn').style.display = 'none';
+    document.getElementById('keyStatus').style.display = 'none';
+    updateActiveBadge();
+}
+
+function toggleSettings() { document.getElementById('settingsPanel').classList.toggle('open'); }
+
+function startLoading() {
+    let idx = 0;
+    document.getElementById('loadingArea').style.display = '';
+    loadingInterval = setInterval(() => {
+        idx = (idx + 1) % LOADING_PHRASES.length;
+        document.getElementById('loadingText').textContent = LOADING_PHRASES[idx];
+    }, 2200);
+}
+function stopLoading() {
+    document.getElementById('loadingArea').style.display = 'none';
+    if (loadingInterval) clearInterval(loadingInterval);
+}
+
+function renderHistory() {
+    const row = document.getElementById('historyRow');
+    const list = document.getElementById('historyList');
+    if (history.length === 0) { row.style.display = 'none'; return; }
+    row.style.display = '';
+    list.innerHTML = history.map(w => `<button class="history-item" onclick="analyzeWord('${w}')">${w}</button>`).join('');
+}
+function addToHistory(w) {
+    history = [w, ...history.filter(x => x !== w)].slice(0, 15);
+    localStorage.setItem('etimolog_history', JSON.stringify(history));
+    renderHistory();
+}
+
+async function exportCache() {
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => {
+        const records = req.result;
+        const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'words.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+}
+
+// ─── API calls ───
+async function callAnthropic(word, key) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json', 'x-api-key': key,
+            'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+            model: 'claude-sonnet-4-20250514', max_tokens: 4000, system: SYSTEM_PROMPT,
+            messages: [{ role: 'user', content: `Analiza la palabra rusa: ${word}` }],
+        }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.type === 'authentication_error'
+        ? 'Clave API de Anthropic inválida.' : `Anthropic: ${d.error.message}`);
+    return d.content.map(i => i.type === 'text' ? i.text : '').filter(Boolean).join('\n');
+}
+
+async function callGemini(word, key) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ parts: [{ text: `Analiza la palabra rusa: ${word}` }] }],
+            generationConfig: { maxOutputTokens: 4000, temperature: 0.7 },
+        }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.status === 'UNAUTHENTICATED'
+        ? 'Clave API de Google inválida.' : `Gemini: ${d.error.message}`);
+    return d.candidates?.[0]?.content?.parts?.map(p => p.text).join('\n') || '';
+}
+
+async function callDeepSeek(word, key) {
+    const r = await fetch('https://api.deepseek.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({
+            model: 'deepseek-chat', max_tokens: 4000, temperature: 0.7,
+            messages: [
+                { role: 'system', content: SYSTEM_PROMPT },
+                { role: 'user', content: `Analiza la palabra rusa: ${word}` },
+            ],
+        }),
+    });
+    const d = await r.json();
+    if (d.error) throw new Error(d.error.type === 'authentication_error'
+        ? 'Clave API de DeepSeek inválida.' : `DeepSeek: ${d.error.message}`);
+    return d.choices?.[0]?.message?.content || '';
+}
+
+function analyzeWord(w) { document.getElementById('wordInput').value = w; analyze(w); }
+
+async function analyze(inputWord) {
+    const w = (inputWord || document.getElementById('wordInput').value).trim();
+    if (!w) return;
+
+    const wordCount = w.split(/\s+/).length;
+    if (wordCount > 3) {
+        showError('Por favor, ingresá una sola palabra o una frase corta (máximo 3 palabras). El análisis etimológico no funciona con oraciones largas.');
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('resultsArea').style.display = 'none';
+        return;
+    }
+
+    document.getElementById('emptyState').style.display = 'none';
+    document.getElementById('resultsArea').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+    document.getElementById('searchBtn').disabled = true;
+    document.getElementById('searchBtn').textContent = 'Analizando…';
+    startLoading();
+
+    try {
+        // 1. Primero verificar caché — siempre, sin importar suscripción
+        const cached = await getCached(w);
+        if (cached) {
+            currentResult = cached;
+            activeSection = null;
+            addToHistory(w);
+            renderResults(currentResult, true);
+            return;
+        }
+
+        // 2. No está en caché — verificar cómo proceder
+        const ownKey = apiKeys[selectedProvider];
+
+        if (!ownKey && !window._subscriptionActive) {
+            if (!window._currentUser) {
+                openAuthModal();
+            } else {
+                openSubModal();
+            }
+            return;
+        }
+
+        // 3. Llamar a la API
+        let raw = '';
+        if (ownKey) {
+            if (selectedProvider === 'anthropic') raw = await callAnthropic(w, ownKey);
+            else if (selectedProvider === 'gemini-flash') raw = await callGemini(w, ownKey);
+            else if (selectedProvider === 'deepseek') raw = await callDeepSeek(w, ownKey);
+        } else {
+            const token = await window._currentUser.getIdToken();
+            const res = await fetch(`${WORKER_URL}/analyze`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ word: w }),
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            raw = JSON.stringify(data.result);
+        }
+
+        const clean = raw.replace(/```json|```/g, '').trim();
+        currentResult = JSON.parse(clean);
+
+        const russianKey = currentResult.palabra.trim().toLowerCase();
+        saveToCache(russianKey, currentResult);
+        if (w.trim().toLowerCase() !== russianKey) {
+            saveToCache(w.trim().toLowerCase(), currentResult);
+        }
+
+        activeSection = null;
+        addToHistory(w);
+        renderResults(currentResult, false);
+
+    } catch (err) {
+        console.error(err);
+        showError(err.message || 'No se pudo analizar la palabra. Verificá tu conexión e intentá de nuevo.');
+    } finally {
+        stopLoading();
+        document.getElementById('searchBtn').disabled = false;
+        document.getElementById('searchBtn').textContent = 'Analizar';
+    }
+}
+
+function showError(msg) {
+    document.getElementById('errorBox').style.display = '';
+    document.getElementById('errorText').textContent = msg;
+}
+
+function renderResults(r, fromCache = false) {
+    const area = document.getElementById('resultsArea');
+    area.style.display = '';
+    const p = PROVIDERS[selectedProvider];
+    let html = `<div class="word-header">
+    <div class="word-main">
+      <h2 class="word-title">${esc(r.palabra)}</h2>
+      ${r.transcripcion ? `<span class="ipa">${esc(r.transcripcion)}</span>` : ''}
     </div>
+    ${r.pronunciacion_aprox ? `<p class="pronun"><span class="pronun-label">Pronunciación aproximada:</span> ${esc(r.pronunciacion_aprox)}</p>` : ''}
+    ${r.traduccion_directa ? `<div class="translation-badge"><span class="translation-label">→ es</span><span class="translation-text">${esc(r.traduccion_directa)}</span></div>` : ''}
+  </div>`;
 
-    <!-- Modal Suscripción -->
-    <div class="modal-overlay" id="subModal" style="display:none">
-        <div class="modal">
-            <button class="modal-close" onclick="closeSubModal()">✕</button>
-            <div class="modal-icon">Э</div>
-            <h2 class="modal-title">Análisis con IA</h2>
-            <p class="modal-desc">Esta palabra no está en el diccionario gratuito. Con una suscripción podés analizar
-                <strong>cualquier palabra del ruso</strong> con IA.
-            </p>
-            <div class="modal-free-note">
-                <span class="modal-free-badge">Gratis para siempre</span>
-                Las 246+ palabras del diccionario no requieren cuenta ni
-                suscripción.
-            </div>
-            <ul class="modal-features">
-                <li>✓ Análisis ilimitados con IA</li>
-                <li>✓ Etimología y raíces protoeslavas</li>
-                <li>✓ Gramática comparativa con el español</li>
-                <li>✓ Evolución semántica histórica</li>
-                <li>✓ Matices culturales únicos</li>
-            </ul>
-            <button class="modal-btn-primary" onclick="goToCheckout()">Suscribirse — $3.49/mes</button>
-            <p class="modal-alt">¿Tenés tu propia clave de API? <a href="#"
-                    onclick="openAdvancedSettings()">Configuración avanzada</a></p>
+    html += `<div class="section-nav">`;
+    SECTIONS.forEach(s => {
+        html += `<button class="nav-btn ${activeSection === s.key ? 'active' : ''}" onclick="filterSection('${s.key}')"><span>${s.label}</span></button>`;
+    });
+    html += `</div><div>`;
+
+    const show = k => !activeSection || activeSection === k;
+    if (show('definicion')) html += card('Definición y traducción', formatText(r.definicion), 0);
+    if (show('etimologia')) html += card('Etimología', formatText(r.etimologia), 100);
+    if (show('evolucion')) html += card('Evolución semántica', formatText(r.evolucion), 200);
+    if (show('gramatical')) html += card('Análisis gramatical comparativo', formatText(r.gramatical), 300);
+    if (show('conceptual')) html += card('Significado conceptual', formatText(r.conceptual), 400);
+    if (show('ejemplos') && r.ejemplos) {
+        let ex = '';
+        r.ejemplos.forEach(e => {
+            ex += `<div class="example-item"><p class="ex-russian">${esc(e.ruso)}</p><p class="ex-spanish">${esc(e.español)}</p>${e.nota ? `<p class="ex-note"><span class="note-tag">Nota:</span> ${esc(e.nota)}</p>` : ''}</div>`;
+        });
+        html += card('Ejemplos en contexto', ex, 500);
+    }
+    html += `</div>`;
+    area.innerHTML = html;
+    area.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function card(label, content, delay) {
+    return `<div class="section-card" style="animation-delay:${delay}ms"><div class="section-header"><h3 class="section-title">${label}</h3></div>${content}</div>`;
+}
+
+function filterSection(k) {
+    activeSection = activeSection === k ? null : k;
+    if (currentResult) renderResults(currentResult);
+}
+
+// ─── Rich text renderer ───
+function formatText(raw) {
+    if (!raw) return '';
+    const lines = raw.replace(/\r\n/g, '\n').replace(/<br\s*\/?>/gi, '\n').split('\n');
+    let html = '';
+    let i = 0;
+
+    while (i < lines.length) {
+        const line = lines[i].trim();
+
+        if (!line) { i++; continue; }
+
+        // Encabezado: línea corta que termina en ':'
+        if (/^[^-\d•*].{0,60}:$/.test(line)) {
+            html += `<p class="rt-heading">${esc(line)}</p>`;
+            i++; continue;
+        }
+
+        // Lista con guión, asterisco o bullet
+        if (/^[-*•]\s+/.test(line)) {
+            html += '<ul class="rt-list">';
+            while (i < lines.length && /^[-*•]\s+/.test(lines[i].trim())) {
+                html += `<li>${renderInline(lines[i].trim().replace(/^[-*•]\s+/, ''))}</li>`;
+                i++;
+            }
+            html += '</ul>';
+            continue;
+        }
+
+        // Lista numerada
+        if (/^\d+[.)]\s+/.test(line)) {
+            html += '<ol class="rt-list">';
+            while (i < lines.length && /^\d+[.)]\s+/.test(lines[i].trim())) {
+                html += `<li>${renderInline(lines[i].trim().replace(/^\d+[.)]\s+/, ''))}</li>`;
+                i++;
+            }
+            html += '</ol>';
+            continue;
+        }
+
+        html += `<p class="body-text">${renderInline(line)}</p>`;
+        i++;
+    }
+
+    return html;
+}
+
+// ─── Cyrillic keyboard ───
+const KB_ROWS = [
+    'йцукенгшщзхъ',
+    'фывапролджэ',
+    'яячсмитьбю',
+];
+
+let kbShift = false;
+
+function buildKeyboard() {
+    const kb = document.getElementById('cyrillicKeyboard');
+    let html = '';
+
+    KB_ROWS.forEach(row => {
+        html += '<div class="kb-row">';
+        if (row === KB_ROWS[2]) html += '<button class="kb-key kb-key--shift" id="shiftBtn" onclick="toggleShift()">⇧</button>';
+        for (const char of row) {
+            html += `<button class="kb-key" data-lower="${char}" onclick="kbType('${char}')">${char}</button>`;
+        }
+        if (row === KB_ROWS[2]) html += '<button class="kb-key kb-key--wide" data-lower="ё" onclick="kbType(\'ё\')">ё</button>';
+        html += '</div>';
+    });
+
+    html += `<div class="kb-row kb-row--bottom">
+        <button class="kb-key kb-key--wide" onclick="kbType(' ')">espacio</button>
+        <button class="kb-key kb-key--action" onclick="kbBackspace()">⌫</button>
+        <button class="kb-key kb-key--action kb-key--enter" onclick="analyze()">↵</button>
+    </div>`;
+
+    kb.innerHTML = html;
+}
+
+function toggleKeyboard() {
+    const kb = document.getElementById('cyrillicKeyboard');
+    const btn = document.getElementById('keyboardToggleBtn');
+    const visible = kb.style.display !== 'none';
+    kb.style.display = visible ? 'none' : '';
+    btn.classList.toggle('active', !visible);
+    if (!visible) document.getElementById('wordInput').focus();
+}
+
+function toggleShift() {
+    kbShift = !kbShift;
+    document.getElementById('shiftBtn').classList.toggle('active', kbShift);
+    document.querySelectorAll('.kb-key[data-lower]').forEach(btn => {
+        btn.textContent = kbShift ? btn.getAttribute('data-lower').toUpperCase() : btn.getAttribute('data-lower');
+    });
+}
+
+function kbType(char) {
+    const input = document.getElementById('wordInput');
+    const ch = kbShift ? char.toUpperCase() : char;
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    input.value = input.value.slice(0, start) + ch + input.value.slice(end);
+    input.selectionStart = input.selectionEnd = start + ch.length;
+    input.focus();
+    if (kbShift) toggleShift();
+}
+
+function kbBackspace() {
+    const input = document.getElementById('wordInput');
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    if (start !== end) {
+        input.value = input.value.slice(0, start) + input.value.slice(end);
+        input.selectionStart = input.selectionEnd = start;
+    } else if (start > 0) {
+        input.value = input.value.slice(0, start - 1) + input.value.slice(start);
+        input.selectionStart = input.selectionEnd = start - 1;
+    }
+    input.focus();
+}
+
+function renderInline(text) {
+    return esc(text)
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>');
+}
+
+function esc(s) { return s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''; }
+
+// ─── DICTIONARY ───────────────────────────────────────────────
+
+let dicData = null;
+let dicFiltered = [];
+let dicPage = 0;
+const DIC_PAGE_SIZE = 40;
+
+const POS_LABELS = {
+    noun: 'sust.', verb: 'verb.', adjective: 'adj.', adverb: 'adv.',
+    pronoun: 'pron.', preposition: 'prep.', conjunction: 'conj.',
+    interjection: 'interj.', particle: 'part.', numeral: 'núm.',
+};
+
+// ─── Cambio de modo ───
+function switchMode(mode) {
+    const isAnalysis = mode === 'analysis';
+    document.getElementById('tabAnalysis').classList.toggle('active', isAnalysis);
+    document.getElementById('tabDictionary').classList.toggle('active', !isAnalysis);
+
+    ['search-area', 'loadingArea', 'errorBox', 'resultsArea', 'emptyState'].forEach(id => {
+        const el = document.getElementById(id) || document.querySelector('.' + id);
+    });
+    document.querySelector('.search-area').style.display = isAnalysis ? '' : 'none';
+    document.getElementById('loadingArea').style.display = 'none';
+    document.getElementById('errorBox').style.display = 'none';
+    document.getElementById('resultsArea').style.display = isAnalysis && currentResult ? '' : 'none';
+    document.getElementById('emptyState').style.display = isAnalysis && !currentResult ? '' : 'none';
+    document.getElementById('dictionaryArea').style.display = isAnalysis ? 'none' : '';
+
+    if (!isAnalysis) loadDictionary();
+
+    const exportBtn = document.getElementById('exportBtn');
+
+    if (exportBtn) {
+        exportBtn.style.display = (mode === 'analysis') ? 'block' : 'none';
+    }
+}
+
+// ─── Carga lazy del JSON ───
+async function loadDictionary() {
+    if (dicData) { renderDicResults(); return; }
+    setDicStatus('Cargando diccionario…');
+    try {
+        const res = await fetch('dictionary.json');
+        if (!res.ok) throw new Error('No se pudo cargar dictionary.json');
+        dicData = await res.json();
+        dicFiltered = dicData;
+        setDicStatus('');
+        renderDicResults();
+    } catch (e) {
+        setDicStatus('⚠️ Error al cargar el diccionario: ' + e.message);
+    }
+}
+
+function setDicStatus(msg) {
+    const el = document.getElementById('dicStatus');
+    el.textContent = msg;
+    el.style.display = msg ? '' : 'none';
+}
+
+// ─── Búsqueda ───
+let dicSearchTimer = null;
+function onDicInput() {
+    clearTimeout(dicSearchTimer);
+    dicSearchTimer = setTimeout(() => {
+        const q = document.getElementById('dicInput').value.trim().toLowerCase();
+        if (!dicData) return;
+        if (!q) {
+            dicFiltered = dicData;
+        } else {
+            dicFiltered = dicData.filter(e =>
+                e.w.toLowerCase().startsWith(q) ||
+                (e.t && e.t.toLowerCase().startsWith(q)) ||
+                (e.d && e.d.toLowerCase().includes(q))
+            );
+            // Primero los que empiezan exacto en ruso
+            dicFiltered.sort((a, b) => {
+                const aEx = a.w.toLowerCase().startsWith(q) ? 0 : 1;
+                const bEx = b.w.toLowerCase().startsWith(q) ? 0 : 1;
+                return aEx - bEx;
+            });
+        }
+        dicPage = 0;
+        renderDicResults();
+    }, 180);
+}
+
+// ─── Render lista ───
+function renderDicResults() {
+    const list = document.getElementById('dicResults');
+    const pag = document.getElementById('dicPagination');
+    const hint = document.getElementById('dicHint');
+    closeDicDetail();
+
+    const total = dicFiltered.length;
+    hint.textContent = total === dicData.length
+        ? `${total.toLocaleString('es-AR')} entradas`
+        : `${total.toLocaleString('es-AR')} resultado${total !== 1 ? 's' : ''}`;
+
+    const start = dicPage * DIC_PAGE_SIZE;
+    const page = dicFiltered.slice(start, start + DIC_PAGE_SIZE);
+
+    if (!page.length) {
+        list.innerHTML = '<p class="dic-empty">Sin resultados.</p>';
+        pag.innerHTML = '';
+        return;
+    }
+
+    list.innerHTML = page.map((e, idx) => `
+        <div class="dic-entry" onclick="openDicDetail(${start + idx})">
+          <span class="dic-word">${escDic(e.w)}</span>
+          ${e.t ? `<span class="dic-translit">${escDic(e.t)}</span>` : ''}
+          ${e.p ? `<span class="dic-pos">${POS_LABELS[e.p] || e.p}</span>` : ''}
+          <span class="dic-def">${escDic(truncate(e.d || '', 80))}</span>
+        </div>`).join('');
+
+    // Paginación
+    const totalPages = Math.ceil(total / DIC_PAGE_SIZE);
+    if (totalPages <= 1) { pag.innerHTML = ''; return; }
+
+    let pagHtml = '';
+    if (dicPage > 0) pagHtml += `<button class="dic-page-btn" onclick="dicGoPage(${dicPage - 1})">←</button>`;
+    pagHtml += `<span class="dic-page-info">${dicPage + 1} / ${totalPages}</span>`;
+    if (dicPage < totalPages - 1) pagHtml += `<button class="dic-page-btn" onclick="dicGoPage(${dicPage + 1})">→</button>`;
+    pag.innerHTML = pagHtml;
+}
+
+function dicGoPage(n) {
+    dicPage = n;
+    renderDicResults();
+    document.getElementById('dictionaryArea').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function truncate(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+function escDic(s) { return s ? s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') : ''; }
+
+// ─── Detalle de entrada ───
+function openDicDetail(globalIdx) {
+    const e = dicFiltered[globalIdx];
+    if (!e) return;
+
+    document.getElementById('dicResults').style.display = 'none';
+    document.getElementById('dicPagination').style.display = 'none';
+    document.querySelector('.dic-search-wrap').style.display = 'none';
+
+    const detail = document.getElementById('dicDetail');
+    detail.style.display = '';
+
+    let html = `
+        <div class="dic-detail-header">
+          <h2 class="dic-detail-word">${escDic(e.w)}</h2>
+          ${e.t ? `<span class="ipa">${escDic(e.t)}</span>` : ''}
+          ${e.p ? `<span class="dic-pos dic-pos--lg">${POS_LABELS[e.p] || e.p}</span>` : ''}
         </div>
-    </div>
+        ${e.d ? `<p class="dic-detail-def">${escDic(e.d)}</p>` : ''}`;
 
-    <!-- Modal Usuario logueado -->
-    <div class="modal-overlay" id="userModal" style="display:none">
-        <div class="modal modal--user">
-            <button class="modal-close" onclick="closeUserModal()">✕</button>
-            <div class="user-avatar" id="userAvatar"></div>
-            <p class="user-email" id="userEmail"></p>
-            <div class="sub-status" id="subStatus"></div>
-            <button class="modal-btn-tertiary" id="manageSubBtn" onclick="openCustomerPortal()"
-                style="display:none">Gestionar suscripción</button>
-            <button class="modal-btn-secondary" onclick="logout()">Cerrar sesión</button>
-        </div>
-    </div>
+    // Línea de tiempo etimológica
+    if (e.e && e.e.length > 0) {
+        html += `<div class="dic-section-title">Etimología</div><div class="dic-timeline">`;
+        e.e.forEach((step, i) => {
+            html += `
+                <div class="dic-timeline-step">
+                  <div class="dic-tl-dot ${i === e.e.length - 1 ? 'dic-tl-dot--last' : ''}"></div>
+                  <div class="dic-tl-body">
+                    <span class="dic-tl-period">${escDic(step.p)}</span>
+                    <span class="dic-tl-form">${escDic(step.f)}</span>
+                    ${step.y ? `<span class="dic-tl-year">${step.y < 0 ? Math.abs(step.y) + ' a.C.' : step.y > 1000 ? 's. ' + Math.floor(step.y / 100) + 'ᵒ' : step.y}</span>` : ''}
+                  </div>
+                </div>`;
+        });
+        html += `</div>`;
+    }
 
-    <div class="settings-panel" id="settingsPanel">
-        <div class="settings-inner">
-            <div class="settings-header">
-                <h3 class="settings-title">Configuración</h3>
-                <button class="close-btn" onclick="toggleSettings()">✕</button>
-            </div>
-            <div class="config-section">
-                <p class="config-label">Clave API</p>
-                <div class="api-key-row">
-                    <input class="api-key-input" type="password" id="apiKeyInput" placeholder="..." spellcheck="false">
-                    <button class="save-key-btn" id="saveKeyBtn" onclick="saveApiKey()">Guardar</button>
-                    <button class="clear-key-btn" id="clearKeyBtn" onclick="clearApiKey()"
-                        style="display:none">Borrar</button>
-                </div>
-                <p class="key-status" id="keyStatus" style="display:none"></p>
-            </div>
-        </div>
-    </div>
+    // Cognados
+    if (e.c && e.c.length > 0) {
+        html += `<div class="dic-section-title">Cognados</div><div class="dic-cognates">`;
+        e.c.forEach(cog => {
+            html += `<div class="dic-cognate"><span class="dic-cog-lang">${escDic(cog.l)}</span><span class="dic-cog-word">${escDic(cog.w)}</span></div>`;
+        });
+        html += `</div>`;
+    }
 
+    // Botón para ir al análisis completo
+    html += `<button class="dic-analyze-btn" onclick="dicAnalyzeWord('${e.w.replace(/'/g, "\\'")}')">
+        Análisis completo →
+    </button>`;
 
-    <!-- Free words sidebar -->
-    <div class="fw-backdrop" id="fwBackdrop" onclick="closeFwSidebar()"></div>
+    document.getElementById('dicDetailContent').innerHTML = html;
+    detail.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
-    <div class="fw-sidebar" id="fwSidebar">
-        <div class="fw-sidebar-inner">
-            <div class="fw-sidebar-header">
-                <span class="free-badge">Gratis · Sin registro</span>
-                <h3 class="free-words-title">
-                    <span id="freeWordsCount">…</span> palabras con análisis completo
-                </h3>
-                <p class="free-words-desc">Sin cuenta. Sin límites. Hacé clic en cualquier palabra.</p>
-            </div>
-            <div id="freeWordsAlpha"></div>
-            <div class="free-words-grid" id="freeWordsList"></div>
-        </div>
-    </div>
+function closeDicDetail() {
+    document.getElementById('dicDetail').style.display = 'none';
+    document.getElementById('dicResults').style.display = '';
+    document.getElementById('dicPagination').style.display = '';
+    document.querySelector('.dic-search-wrap').style.display = '';
+}
 
-    <!-- Sidebar toggle tab -->
-    <button class="fw-tab" id="fwTab" onclick="toggleFwSidebar()" title="Palabras con análisis gratuito">
-        <span class="fw-tab-logo">Э</span>
-        <span class="fw-tab-label">Gratis</span>
-        <span class="fw-tab-count" id="fwTabCount"></span>
-        <svg class="fw-tab-arrow" width="10" height="10" viewBox="0 0 10 10" fill="none">
-            <path d="M3 2l4 3-4 3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"
-                stroke-linejoin="round" />
-        </svg>
-    </button>
-
-    <div class="mode-tabs">
-        <button class="mode-tab active" id="tabAnalysis" onclick="switchMode('analysis')">
-            Анализar
-        </button>
-        <button class="mode-tab" id="tabDictionary" onclick="switchMode('dictionary')">
-            Diccionario
-            <span class="dic-count-badge">47 292 palabras</span>
-        </button>
-    </div>
-
-    <div class="search-area">
-        <div class="search-box">
-            <div class="input-row">
-                <span class="input-icon"><i data-lucide="search"></i></span>
-                <input class="main-input" type="text" id="wordInput" placeholder="Escribe una palabra en ruso…"
-                    spellcheck="false">
-                <button class="keyboard-toggle-btn" id="keyboardToggleBtn" onclick="toggleKeyboard()"
-                    title="Teclado cirílico">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
-                        stroke-linecap="round" stroke-linejoin="round">
-                        <rect x="2" y="6" width="20" height="13" rx="2" />
-                        <path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M8 14h8M6 14h.01M18 14h.01" />
-                    </svg>
-                    <span>АБВ</span>
-                </button>
-                <button class="search-btn" id="searchBtn" onclick="analyze()">Analizar</button>
-            </div>
-
-            <div class="cyrillic-keyboard" id="cyrillicKeyboard" style="display:none"></div>
-
-            <div class="examples-row">
-                <span class="examples-label">Ejemplos:</span>
-                <button class="example-chip" onclick="analyzeWord('дерево')">дерево</button>
-                <button class="example-chip" onclick="analyzeWord('человек')">человек</button>
-                <button class="example-chip" onclick="analyzeWord('ребёнок')">ребёнок</button>
-                <button class="example-chip" onclick="analyzeWord('мать')">мать</button>
-                <button class="example-chip" onclick="analyzeWord('сын')">сын</button>
-                <button class="example-chip" onclick="analyzeWord('семья')">семья</button>
-                <button class="example-chip" onclick="analyzeWord('мир')">мир</button>
-            </div>
-            <div class="history-row" id="historyRow" style="display:none">
-                <span class="history-label">Historial:</span>
-                <div class="history-list" id="historyList"></div>
-            </div>
-        </div>
-    </div>
-
-    <main class="main-content">
-
-        <div class="loading-container" id="loadingArea" style="display:none">
-            <div class="loading-glyph">
-                <span class="loading-letter">Я</span>
-                <div class="loading-ring"></div>
-            </div>
-            <p class="loading-text" id="loadingText">Consultando raíces protoeslavas…</p>
-            <div class="loading-bar">
-                <div class="loading-bar-inner"></div>
-            </div>
-        </div>
-
-        <div class="error-box" id="errorBox" style="display:none">
-            <span>⚠️</span> <span id="errorText"></span>
-        </div>
-
-        <div class="results-area" id="resultsArea" style="display:none"></div>
-
-        <div class="empty-state" id="emptyState">
-            <div class="empty-glyph">Э</div>
-            <p class="empty-text">
-                Escribí cualquier palabra en ruso para saber su etimología,
-                evolución histórica y análisis gramatical comparativo con el español.
-            </p>
-            <div class="feature-grid">
-                <div class="feature-card"><strong class="feature-title">Etimología</strong></div>
-                <div class="feature-card"><strong class="feature-title">Gramática comparativa</strong></div>
-                <div class="feature-card"><strong class="feature-title">Evolución semántica</strong></div>
-                <div class="feature-card"><strong class="feature-title">Matices culturales</strong></div>
-            </div>
-        </div>
-
-        <button class="cache-btn" id="exportBtn" onclick="exportCache()">Exportar caché</button>
-
-        <div class="dictionary-area" id="dictionaryArea" style="display:none">
-            <div class="dic-search-wrap">
-                <div class="dic-search-row">
-                    <span class="input-icon">🔎</span>
-                    <input class="dic-input" id="dicInput" type="text" placeholder="Buscar en el diccionario…"
-                        spellcheck="false" oninput="onDicInput()" />
-                    <span class="dic-hint" id="dicHint"></span>
-                </div>
-            </div>
-
-            <div class="dic-alpha-filter" id="dicAlphaFilter"></div>
-
-            <div class="dic-status" id="dicStatus">Cargando diccionario…</div>
-            <div class="dic-results" id="dicResults"></div>
-            <div class="dic-pagination" id="dicPagination"></div>
-            <div class="dic-detail" id="dicDetail" style="display:none">
-                <button class="dic-back-btn" onclick="closeDicDetail()">← Volver</button>
-                <div id="dicDetailContent"></div>
-            </div>
-        </div>
-
-    </main>
-
-    <footer class="footer">
-        <p>© 2026 Etyma. Todos los derechos reservados.</p>
-    </footer>
-
-    <script src="script.js">
+function dicAnalyzeWord(word) {
+    switchMode('analysis');
+    document.getElementById('wordInput').value = word;
+    analyze();
+}
 
 
-    </script>
+// Alfabeto cirílico
+const russianAlphabet = 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'.split('');
+let currentAlphaFilter = null;
 
-</body>
 
-</html>
+function renderAlphaFilter() {
+    const container = document.getElementById('dicAlphaFilter');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+
+    const allBtn = document.createElement('button');
+    allBtn.className = 'alpha-btn active';
+    allBtn.textContent = 'Все'; // "Todos" en ruso
+    allBtn.onclick = () => applyAlphaFilter(null, allBtn);
+    container.appendChild(allBtn);
+
+    russianAlphabet.forEach(letter => {
+        const btn = document.createElement('button');
+        btn.className = 'alpha-btn';
+        btn.textContent = letter;
+        btn.onclick = () => applyAlphaFilter(letter, btn);
+        container.appendChild(btn);
+    });
+}
+
+function applyAlphaFilter(letter, btnElement) {
+    currentAlphaFilter = letter;
+
+    document.querySelectorAll('.alpha-btn').forEach(b => b.classList.remove('active'));
+    if (btnElement) {
+        btnElement.classList.add('active');
+    }
+
+    const searchInput = document.getElementById('dicInput');
+    if (searchInput) searchInput.value = '';
+
+    if (!dicData) return;
+
+    if (letter === null) {
+        dicFiltered = dicData;
+    } else {
+        dicFiltered = dicData.filter(e => e.w.toUpperCase().startsWith(letter));
+    }
+
+    dicPage = 0;
+    renderDicResults();
+}
+
+// ─── Auth ───
+function onAuthChanged(user) {
+    const authBtn = document.getElementById('authBtn');
+    if (user) {
+        authBtn.textContent = user.displayName || user.email.split('@')[0];
+        authBtn.onclick = openUserModal;
+        checkSubscriptionStatus();
+    } else {
+        authBtn.textContent = 'Iniciar sesión';
+        authBtn.onclick = openAuthModal;
+        window._subscriptionActive = false;
+    }
+}
+
+async function checkSubscriptionStatus() {
+    try {
+        const token = await window._currentUser.getIdToken();
+        const res = await fetch(`${WORKER_URL}/status`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        window._subscriptionActive = data.subscription_status === 'active';
+        window._subscriptionEnd = data.subscription_end;
+    } catch (e) {
+        window._subscriptionActive = false;
+    }
+    updateSubStatusUI();
+}
+
+function updateSubStatusUI() {
+    const badge = document.getElementById('subStatus');
+    const manageBtn = document.getElementById('manageSubBtn');
+    if (!badge) return;
+    if (window._subscriptionActive) {
+        let msg = '✓ Suscripción activa';
+        if (window._subscriptionEnd) {
+            const endDate = new Date(window._subscriptionEnd);
+            const formatted = endDate.toLocaleDateString('es-AR', {
+                day: 'numeric', month: 'long', year: 'numeric'
+            });
+            msg = `✓ Activa hasta el ${formatted}`;
+        }
+        badge.innerHTML = `<span class="sub-badge sub-badge--active">${msg}</span>`;
+        if (manageBtn) manageBtn.style.display = 'block';
+    }
+}
+
+function openAuthModal() {
+    document.getElementById('authModal').style.display = 'flex';
+}
+function closeAuthModal() {
+    document.getElementById('authModal').style.display = 'none';
+    document.getElementById('authError').style.display = 'none';
+}
+async function openUserModal() {
+    const user = window._currentUser;
+    document.getElementById('userAvatar').textContent = (user.displayName || user.email)[0].toUpperCase();
+    document.getElementById('userEmail').textContent = user.email;
+    document.getElementById('userModal').style.display = 'flex';
+    // Refrescar estado de suscripción cada vez que se abre el modal
+    // para reflejar cambios hechos desde el Customer Portal (altas, bajas)
+    updateSubStatusUI(); // mostrar estado cacheado primero
+    await checkSubscriptionStatus(); // luego actualizar con el valor real
+}
+function closeUserModal() {
+    document.getElementById('userModal').style.display = 'none';
+}
+function openCustomerPortal() {
+    // Abre el portal de Lemon Squeezy donde el usuario puede cancelar
+    // o gestionar su suscripción. Si no está logueado en Lemon, le pide
+    // email y le envía un link mágico.
+    window.open('https://etyma.lemonsqueezy.com/billing', '_blank');
+}
+function openSubModal() {
+    document.getElementById('subModal').style.display = 'flex';
+}
+function closeSubModal() {
+    document.getElementById('subModal').style.display = 'none';
+}
+function openAdvancedSettings() {
+    closeSubModal();
+    toggleSettings();
+}
+
+function switchAuthTab(tab) {
+    document.getElementById('authLoginForm').style.display = tab === 'login' ? '' : 'none';
+    document.getElementById('authRegisterForm').style.display = tab === 'register' ? '' : 'none';
+    document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
+    document.getElementById('tabRegister').classList.toggle('active', tab === 'register');
+}
+
+function showAuthError(msg) {
+    const el = document.getElementById('authError');
+    el.textContent = msg;
+    el.style.display = '';
+}
+
+async function loginWithEmail() {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    try {
+        await window._signInWithEmailAndPassword(window._auth, email, password);
+        await createUserDocument(user.user || window._currentUser);
+        closeAuthModal();
+    } catch (e) {
+        showAuthError(e.code === 'auth/invalid-credential' ? 'Email o contraseña incorrectos.' : e.message);
+    }
+}
+
+async function registerWithEmail() {
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+    try {
+        await window._createUserWithEmailAndPassword(window._auth, email, password);
+        await createUserDocument(user.user || window._currentUser);
+        closeAuthModal();
+    } catch (e) {
+        showAuthError(e.code === 'auth/email-already-in-use' ? 'Ese email ya está registrado.' : e.message);
+    }
+}
+
+async function loginWithGoogle() {
+    try {
+        await window._signInWithPopup(window._auth, window._GoogleProvider);
+        closeAuthModal();
+    } catch (err) {
+        // COOP bloquea la detección del cierre del popup, pero el login puede haber funcionado
+        if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+            // Esperá un tick y chequeá si hay usuario
+            setTimeout(() => {
+                if (window._auth.currentUser) {
+                    closeAuthModal();
+                } else {
+                    showAuthError('No se pudo iniciar sesión con Google.');
+                }
+            }, 500);
+            return;
+        }
+        showAuthError('No se pudo iniciar sesión con Google.');
+        console.error(err);
+    }
+}
+
+async function logout() {
+    await window._signOut(window._auth);
+    closeUserModal();
+}
+
+async function goToCheckout() {
+    if (!window._currentUser) {
+        closeSubModal();
+        openAuthModal();
+        return;
+    }
+
+    const uid = window._currentUser.uid;
+    const checkoutUrl = `https://etyma.lemonsqueezy.com/checkout/buy/019d0073-ff79-400c-8f77-d455787c24e6?checkout%5Bcustom%5D%5Buser_id%5D=${uid}`;
+
+    const win = window.open('', '_blank');
+    win.location.href = checkoutUrl;
+}
+
+async function createUserDocument(user) {
+    try {
+        const token = await user.getIdToken();
+        await fetch(`${WORKER_URL}/create-user`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+            },
+        });
+    } catch (e) {
+        console.warn('Error creando documento de usuario:', e);
+    }
+}
+
+
+init();
+renderAlphaFilter();
