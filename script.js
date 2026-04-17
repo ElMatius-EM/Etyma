@@ -499,23 +499,26 @@ async function analyze(inputWord) {
         return;
     }
 
-    document.getElementById('emptyState').style.display = 'none';
-    document.getElementById('resultsArea').style.display = 'none';
     document.getElementById('errorBox').style.display = 'none';
     document.getElementById('searchBtn').disabled = true;
     document.getElementById('searchBtn').textContent = 'Analizando…';
-    startLoading();
 
     try {
-        // 1. Primero verificar caché — siempre, sin importar suscripción
+        // 1. Primero verificar caché — antes de tocar la UI para evitar el flash del footer
         const cached = await getCached(w);
         if (cached) {
             currentResult = cached;
             activeSection = null;
             addToHistory(w);
+            document.getElementById('emptyState').style.display = 'none';
             renderResults(currentResult, true);
             return;
         }
+
+        // No está en caché — recién ahora ocultamos el contenido y mostramos el loader
+        document.getElementById('emptyState').style.display = 'none';
+        document.getElementById('resultsArea').style.display = 'none';
+        startLoading();
 
         // 2. No está en caché — verificar cómo proceder
         const ownKey = apiKeys[selectedProvider];
@@ -1040,9 +1043,13 @@ async function checkSubscriptionStatus() {
 function updateSubStatusUI() {
     const badge = document.getElementById('subStatus');
     const manageBtn = document.getElementById('manageSubBtn');
+
     if (!badge) return;
+
     if (window._subscriptionActive) {
         let msg = '✓ Suscripción activa';
+
+        // Verificamos si hay fecha de fin. 
         if (window._subscriptionEnd) {
             const endDate = new Date(window._subscriptionEnd);
             const formatted = endDate.toLocaleDateString('es-AR', {
@@ -1050,8 +1057,14 @@ function updateSubStatusUI() {
             });
             msg = `✓ Activa hasta el ${formatted}`;
         }
+
         badge.innerHTML = `<span class="sub-badge sub-badge--active">${msg}</span>`;
         if (manageBtn) manageBtn.style.display = 'block';
+
+    } else {
+        // Manejo explícito de las cuentas sin suscripción
+        badge.innerHTML = `<span class="sub-badge sub-badge--inactive">Sin suscripción activa</span>`;
+        if (manageBtn) manageBtn.style.display = 'none';
     }
 }
 
